@@ -1,0 +1,474 @@
+---
+title: "Figures_Pleos_GrowthCurves_CarbonComsuption_EnzymaticActivity"
+author: "J Cuamatzi"
+date: "2/9/2023"
+output: html_document
+---
+
+This `RMarkDown` reports the <b>Figure 2</b>, <b>Figure 3</b> and <b>Figure 5</b> of the manuscript <b>Regulation of dye peroxidas gene expression in Pleurotus ostreatus grown on glycerol as the carbon source</b>
+
+
+```{r libraries, echo = F, include=F, warning=FALSE}
+# Change to current directory
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+
+
+rm(list = ls()) # Clean env
+
+
+# Load necessary libraries
+
+
+libraries <- c("data.table", "ggplot2", "dplyr", "minpack.lm", "tidyverse", "rstatix", "ggpubr",
+               "cowplot", "ggh4x", "ggtext", "writexl", "knitr", "kableExtra")
+
+for (lib in libraries) {
+  if (!requireNamespace(lib, quietly = TRUE)) {
+    suppressPackageStartupMessages(install.packages(lib, dependencies = TRUE))
+  }
+  suppressPackageStartupMessages(library(lib, character.only = TRUE))
+}
+
+
+rm(lib, libraries)
+
+```
+
+
+```{r functions, echo = F, include=F}
+# Custom functions for subsequent analysis
+
+# Define the logistic growth model
+logistic_growth <- function(t, K, mu, N0) {
+  return(K / (1 + ((K - N0) / N0) * exp(-mu * t)))
+}
+
+
+# Define a function for fitting growth models
+fit_growth_model <- function(data) {
+  initial_parameters <- list(K = 5.5, mu = 0.02, N0 = 0.01)
+  fit <- nlsLM(Biomass ~ logistic_growth(Time, K, mu, N0),
+               data = data,
+               start = initial_parameters,
+               control = nls.lm.control(maxiter = 100))
+  return(fit)
+}
+
+
+# Define a function to create and plot growth plots
+create_and_plot_growth_plot <- function(df, condition, color, shape) {
+  plot <- df %>%
+    filter(Condition == condition) %>%
+    ggplot(aes(x = Time)) +
+    geom_point(aes(y = BiomassMean, color = Condition, shape = Condition, fill = Condition), color = "black", size = 3) +
+    geom_errorbar(aes(ymin = (BiomassMean - BiomassSD), ymax = (BiomassMean + BiomassSD)), width = 5) +
+    geom_line(aes(y = ModelGrowth, color = Condition), linewidth = 1.5, alpha = 0.8) +
+    theme_classic() +
+    labs(x = "\nTime (h)", y = "Biomass (g/L)\n") +
+    scale_y_continuous(limits = c(0, 10), breaks = seq(0, 10, 1)) +
+    scale_x_continuous(limits = c(0, 520), breaks = seq(0, 520, 50)) +
+    scale_shape_manual(values = shape) +
+    scale_fill_manual(values = color) +
+    scale_color_manual(values = color) +
+    theme(
+      axis.title = element_text(face = "bold", color = "black", size = 14),
+      axis.text = element_text(size = 13, color = "black"),
+      legend.title = element_text(face = "bold", color = "black"),
+      legend.position = "none",
+      legend.justification = c(0, 1)
+    )
+  
+  return(plot)
+}
+
+
+```
+
+# Figure 2A
+## Plot of Growth Curves
+
+```{r growthPlotFig2A, echo=F}
+colorPalette <- c("darkblue", "gold2", "darkcyan", "tan2")
+#scale_fill_manual(values = c("darkgreen", "darkblue", "darkred", "#CC79A7"))
+
+
+
+# Read data of pleurotus ostreatus growth on different carbon sources
+#list.files()
+
+df.pleos <- fread("Data_PleosGrowthCurves_CarbonConsumption_EnzymaticActivity.csv")
+
+df.pleos.gk <- df.pleos[Measure == "GrowthKinetics"]
+
+# Compute the mean for each condition
+df.mean.gk <- df.pleos.gk %>% 
+  group_by(Condition) %>% 
+  pivot_longer(cols = R1:R3,
+               names_to = "Replicate",
+               values_to = "Biomass") %>%
+  ungroup() %>% 
+  group_by(Time, Condition) %>% 
+  reframe(BiomassMean = mean(Biomass),
+          BiomassSD = sd(Biomass)/sqrt(length(Biomass)) ) %>% setDT()
+
+
+# Adjust the curve
+# Fit the logistic growth model to the data with improved initial estimates
+po.glucose.gk <- df.mean.gk[Condition == "Glucose"] 
+po.glucose.YAG.gk  <- df.mean.gk[Condition == "Glucose+YAG"] 
+po.glycerol.gk  <- df.mean.gk[Condition == "Glycerol"] 
+po.glycerol.YAG.gk  <- df.mean.gk[Condition == "Glycerol+YAG"] 
+
+
+fit.Glucose <- nlsLM(BiomassMean ~ logistic_growth(Time, K, mu, N0),
+      data = po.glucose.gk, 
+      start = list(K = 5.5, mu = 0.02, N0 = 0.01),
+      control = nls.lm.control(maxiter = 100))
+
+fit.Glucose.YAG <- nlsLM(BiomassMean ~ logistic_growth(Time, K, mu, N0),
+                     data = po.glucose.YAG.gk, 
+                     start = list(K = 5.5, mu = 0.02, N0 = 0.01),
+                     control = nls.lm.control(maxiter = 100))
+
+fit.Glycerol <- nlsLM(BiomassMean ~ logistic_growth(Time, K, mu, N0),
+                     data = po.glycerol.gk, 
+                     start = list(K = 5.5, mu = 0.02, N0 = 0.01),
+                     control = nls.lm.control(maxiter = 100))
+
+fit.Glycerol.YAG <- nlsLM(BiomassMean ~ logistic_growth(Time, K, mu, N0),
+                      data = po.glycerol.YAG.gk, 
+                      start = list(K = 5.5, mu = 0.02, N0 = 0.01),
+                      control = nls.lm.control(maxiter = 100))
+
+# 
+# Adding model values to:
+ # Glucose
+po.glucose.gk$ModelGrowth <- logistic_growth(po.glucose.gk$Time, 
+                                         K = coef(fit.Glucose)["K"], 
+                                         mu = coef(fit.Glucose)["mu"],
+                                         N0 = coef(fit.Glucose)["N0"])
+
+ # Glucose + YAG
+po.glucose.YAG.gk$ModelGrowth <- logistic_growth(po.glucose.YAG.gk$Time, 
+                                             K = coef(fit.Glucose.YAG)["K"], 
+                                             mu = coef(fit.Glucose.YAG)["mu"],
+                                             N0 = coef(fit.Glucose.YAG)["N0"])
+ # Glycerol
+po.glycerol.gk$ModelGrowth <- logistic_growth(po.glycerol.gk$Time, 
+                                             K = coef(fit.Glycerol)["K"], 
+                                             mu = coef(fit.Glycerol)["mu"],
+                                             N0 = coef(fit.Glycerol)["N0"])
+
+ # Glycerol + YAG 
+po.glycerol.YAG.gk$ModelGrowth <- logistic_growth(po.glycerol.YAG.gk$Time, 
+                                             K = coef(fit.Glycerol.YAG)["K"], 
+                                             mu = coef(fit.Glycerol.YAG)["mu"],
+                                             N0 = coef(fit.Glycerol.YAG)["N0"])
+
+df.pleos.gk.adjusted <- bind_rows(po.glucose.gk, 
+                         po.glucose.YAG.gk, 
+                         po.glycerol.gk, 
+                         po.glycerol.YAG.gk)
+
+# remove merged objects
+rm(po.glucose.gk, po.glucose.YAG.gk, po.glycerol.gk, po.glycerol.YAG.gk)
+
+
+# Plotting the growth curves
+plot.growthCurves <- df.pleos.gk.adjusted %>% 
+  ggplot(aes(x = Time))+
+  geom_point(aes(y = BiomassMean, color = Condition, shape = Condition, fill = Condition), color = "black", size = 4)+
+  geom_errorbar(aes(ymin = (BiomassMean - BiomassSD), 
+                    ymax = (BiomassMean + BiomassSD)), width = 5) +
+  geom_line(aes(y = ModelGrowth, color = Condition), linewidth = 1, alpha = 0.8) +
+  theme_classic()+ 
+  labs(x = "\nTime (h)", y = "Biomass (g/L)\n" ) +
+  scale_y_continuous(limits = c(0, 10), breaks = seq(0,10, 1),
+                     minor_breaks = seq(0, 10, by = 0.5),
+                     expand = c(0,0),
+                     guide = "axis_minor")+
+  
+  scale_x_continuous(limits = c(0, 520), breaks = seq(0,520, 50))+
+  
+  scale_shape_manual(values = c(21, 22, 23, 24)) +
+  scale_fill_manual(values = colorPalette) +
+  scale_color_manual(values = colorPalette) +
+  theme(
+    axis.title = element_markdown(face = "bold", color = "black", size = 14),
+    axis.text = element_markdown(size = 13, color = "black"),
+    legend.title = element_text(face = "bold", color = "black"),
+    legend.position = "none",
+    legend.justification = c(0,1),
+    ggh4x.axis.ticks.length.minor = rel(0.5)
+  )
+
+plot.growthCurves
+
+
+# Kinetics parameters:
+mu.Glucose <- coef(fit.Glucose)["mu"]
+mu.Glucose.YAG <- coef(fit.Glucose.YAG)["mu"]
+mu.Glycerol <- coef(fit.Glycerol)["mu"]
+mu.Glycerol.YAG <- coef(fit.Glycerol.YAG)["mu"]
+
+```
+
+# Figure 2B
+## Plot of growth especific growth
+
+```{r muPlot, echo = F}
+
+# Analyzing by replicate
+df.pleos <- df.pleos.gk %>%
+  group_by(Condition) %>%
+  pivot_longer(cols = R1:R3, names_to = "Replicate", values_to = "Biomass")
+
+df.pleos.R1 <- df.pleos %>% filter(Replicate == "R1")
+df.pleos.R2 <- df.pleos %>% filter(Replicate == "R2")
+df.pleos.R3 <- df.pleos %>% filter(Replicate == "R3")
+
+
+# Create a list of replicates
+replicates <- c("R1", "R2", "R3")
+
+# Create an empty list to store fit results
+fit_results <- list()
+
+# Loop through replicates
+for (replicate in replicates) {
+  # Filter data for the current replicate
+  df_replicate <- df.pleos %>% filter(Replicate == replicate)
+  
+  # Create an empty list to store the fit results for each condition
+  fit_results_replicate <- list()
+  
+  for (condition in unique(df_replicate$Condition)) {
+    #print(paste(replicate, condition))
+    
+    subset_data <- df_replicate[df_replicate$Condition == condition, ]
+    
+    # Fit the growth model
+    fit <- fit_growth_model(subset_data)
+    
+    # Assign the fit result
+    fit_results_replicate[[as.character(condition)]] <- fit
+  }
+  
+  # Store the fit results for the current replicate
+  fit_results[[replicate]] <- fit_results_replicate
+}
+
+# Create an empty data frame to store the results
+result_mu <- data.frame(Condition = character(), GrowthRate = numeric(), Replicate = character())
+
+# Loop through replicates and conditions to extract the "mu" value
+for (replicate in replicates) {
+  fit_results_replicate <- fit_results[[replicate]]
+  
+  for (condition_name in names(fit_results_replicate)) {
+    fit <- fit_results_replicate[[condition_name]]
+    r_value <- coef(fit)["mu"]
+    
+    # Add a row to the data frame
+    result_mu <- rbind(result_mu, data.frame(Condition = condition_name, GrowthRate = r_value, Replicate = replicate))
+  }
+}
+
+
+
+# Calculate means and SE for each condition
+summary_mu <- result_mu %>% 
+  group_by(Condition) %>% 
+  reframe(MeanGrowthRate = mean(GrowthRate),
+          SE = sd(GrowthRate)/sqrt(length(GrowthRate)) )
+
+# Computing the statistics
+stat.test <- result_mu %>% 
+  t_test(GrowthRate ~ Condition) %>% 
+  add_xy_position(x = "Condition")
+
+
+
+# Plotting 
+mu.plot <- ggplot(data = result_mu)+
+  geom_bar(data = summary_mu, aes(x = Condition, 
+                                  y = MeanGrowthRate,
+                                  fill = Condition), 
+           color = "black",
+           stat = "identity", alpha = 0.6)+ 
+  geom_point(data = result_mu, aes(x = Condition, y = GrowthRate, shape = Condition,
+                                    fill = Condition), color = "black", size = 3)+
+  geom_errorbar(data = summary_mu, aes(x = Condition, ymin = MeanGrowthRate - SE, ymax = MeanGrowthRate + SE),
+                width = 0.4)+
+  # scale_y_continuous(limits = c(0,11), 
+  #                    breaks = c(0, 2, 4, 6, 8, 10), 
+  #                    minor_breaks = seq(0, 10, by = 1),
+  #                    expand = c(0,0),
+  #                    guide = "axis_minor") +
+  scale_y_continuous(limits = c(0, 0.08),
+                     breaks = seq(0, 0.08, 0.02),
+                     minor_breaks = seq(0, 0.08, 0.01),
+                     expand = c(0, 0),
+                     guide = "axis_minor") +
+  labs(x = "\nCondition", y = expression( bold(paste("Growth Rate (", mu, ") (h"^-1,")"))))+
+  scale_x_discrete(labels = c("Glucose" = "Glu",
+                              "Glycerol" = "Gly",
+                              "Glucose+YAG" = "Glu + \nYAG",
+                              "Glycerol+YAG" = "Gly + \nYAG"))+
+  theme_classic()+
+  scale_fill_manual(values = colorPalette) +
+  scale_color_manual(values = colorPalette) +
+  scale_shape_manual(values = c(21, 22, 23, 24)) +
+  theme(
+    axis.title = element_text(face = "bold", color = "black", size = 14),
+    axis.text = element_text(size = 13, color = "black"),
+    legend.position = "none",
+    ggh4x.axis.ticks.length.minor = rel(1)
+  ) +
+  stat_pvalue_manual(data = stat.test, label = "p.adj.signif")
+
+kable(summary_mu, format = "markdown", align = "c")
+
+mu.plot
+
+# Merge plots
+
+plot.Pleos <- plot_grid(plot.growthCurves, mu.plot, rel_widths = c(1.5, 0.5), align = "h", labels = c("A)", "B)"))
+plot.Pleos
+
+# Export plot
+ggsave(filename = "Figure_2.png", plot = plot.Pleos, width = 12, height = 7, dpi = 300, units = "in", bg = "white")
+
+# print statistics
+writexl::write_xlsx(stat.test, path = "Figure_2_StatisticsTestMu.xlsx")
+
+
+```
+
+# Figure 3
+## Carbon Consumption
+
+```{r plotGrowthCons, echo = F}
+
+df.pleos <- fread("Data_PleosGrowthCurves_CarbonConsumption_EnzymaticActivity.csv")
+# 
+# #df.pleos
+# 
+# get.DF <- function(data, condition){
+#   df.1 <- data[Condition == condition & Measure == "GrowthKinetics"]
+#   df.2 <- data[Condition == condition & Measure == "CarbonComsuption"]
+#   
+#   df.1 <- df.1 %>% select(!Measure) %>% 
+#     pivot_longer(cols = R1:R3, names_to = "Replicate", values_to = "Observation") %>% 
+#     mutate(MeasureType = "Growth")
+#   
+#   df.2 <- df.2 %>% select(!Measure) %>% 
+#     pivot_longer(cols = R1:R3, names_to = "Replicate", values_to = "Observation")%>% 
+#     mutate(MeasureType = "GlucoseConsumption")
+#   
+#   
+#   df.3 <- bind_rows(df.1, df.2) %>% setDT()
+#   
+#   return(df.3)
+# }
+
+
+## Plotting the four conditions
+df.pleos.cc <- df.pleos[Measure == "CarbonComsuption"]
+
+FigureCarbonComsuption <- df.pleos.cc %>% pivot_longer(cols = R1:R3, names_to = "Replicate", values_to = "Observation") %>% 
+  group_by(Condition, Time) %>% 
+  reframe(ObservationMean = mean(Observation),
+          SE = sd(Observation)/sqrt(length(Observation))) %>% 
+  ggplot(aes(x = Time))+
+  geom_point(aes(y = ObservationMean, 
+                 color = Condition, 
+                 fill = Condition,
+                 shape = Condition), size = 4)+
+  geom_errorbar(aes(ymin = ObservationMean - SE,
+                    ymax = ObservationMean + SE), width = 5)+
+  geom_line(aes(y = ObservationMean, color = Condition), linetype = "dashed", linewidth = 1, alpha = 0.8)+
+  scale_shape_manual(values = c(21,22,23,24))+
+  scale_color_manual(values = colorPalette)+
+  scale_fill_manual(values = colorPalette)+
+  scale_x_continuous(limits = c(0,530), breaks = seq(0, 530, 50))+
+  scale_y_continuous(limits = c(0,11), 
+                     breaks = c(0, 2, 4, 6, 8, 10), 
+                     minor_breaks = seq(0, 10, by = 1),
+                     expand = c(0,0),
+                     guide = "axis_minor")+
+  
+  labs(x = "\nTime (h)", y = "Carbon Consumption (g/L)")+
+  theme_classic()+
+  theme(
+    axis.title = element_text(face = "bold", color = "black", size = 13),
+    axis.text = element_text(color = "black", size = 11),
+    legend.position = "none",
+    
+    ggh4x.axis.ticks.length.minor = rel(1)
+  ); FigureCarbonComsuption
+
+
+# Exporting as png
+ggsave(filename = "Figure_3.png", 
+       plot = FigureCarbonComsuption, 
+       dpi = 300, units = "in", width = 9, height = 7,
+       bg = "white")
+
+
+```
+
+# Figure 5
+## Enzymatic Activity
+
+```{r Figure5, echo = F}
+### Enzymatic plot
+# Here: extracted the data of Enzymatic Acvitity
+
+df.EnzAct <- df.pleos[Measure == "EnzymaticActivity"]
+
+# Compute mean and Standard Error
+df.EnzAct.Mean <- df.EnzAct %>% group_by(Time, Condition) %>% 
+  pivot_longer(cols = R1:R3,
+               names_to = "Replicate",
+               values_to = "UI") %>% 
+  reframe(MeanUI = mean(UI),
+          SE = sd(UI)/sqrt(length(UI))) 
+
+# Plot 4 fermentations
+FigureEnzymaticActivity <- df.EnzAct.Mean %>% 
+  ggplot(aes(x = Time))+
+  geom_point(aes(y = MeanUI, color = Condition, fill = Condition, shape = Condition), size = 4)+
+  geom_errorbar(aes(ymin = MeanUI-SE, ymax = MeanUI+SE), width = 5)+
+  geom_line(aes(y = MeanUI, color = Condition), linewidth = 1, alpha = 1)+
+  scale_shape_manual(values = c(21,22,23,24))+
+  scale_x_continuous(limits = c(0,530), breaks = seq(0, 530, 50))+
+  scale_y_continuous(limits = c(0, 5000), breaks = seq(0, 5000, 500), minor_breaks = seq(0, 5000, 250))+
+  scale_color_manual(values = colorPalette)+
+  scale_fill_manual(values = colorPalette)+
+  labs(x = "\nTime (h)", y = "DyP Activity (UI/L)\n")+
+  theme_classic()+
+  theme(
+    axis.title = element_text(face = "bold", color = "black", size = 13),
+    axis.text = element_text(color = "black", size = 11),
+    legend.position = "none"); FigureEnzymaticActivity
+
+# Saving Figure 5
+ggsave(filename = "Figure_5.png", plot = FigureEnzymaticActivity, dpi = 300, units = "in", width = 9, height = 7,
+       bg = "white")
+
+
+```
+
+
+
+```{r savePlots, echo=F, include=F}
+
+rm(list = ls())
+
+
+```
+
+
+
+
