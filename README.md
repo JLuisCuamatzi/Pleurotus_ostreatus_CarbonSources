@@ -12,7 +12,7 @@ The code to reproduce these figures is at: `Figures_Pleos_GrowthCurves_CarbonCom
 
 ### Decolorization of Acetyl Yellow G
 
-The data to reproduce the figure 4 is available at: `` 
+The data to reproduce the figure 4 is available at: `Data_DecolorizationAYG.xlsx` 
 
 ### Expression of <i>Pleos</i>-DyeP genes
 
