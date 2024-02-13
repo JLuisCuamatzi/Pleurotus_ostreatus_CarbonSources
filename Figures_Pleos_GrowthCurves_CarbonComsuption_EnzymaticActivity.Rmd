@@ -9,6 +9,8 @@ This `RMarkDown` reports the <b>Figure 2</b>, <b>Figure 3</b> and <b>Figure 5</b
 
 
 ```{r libraries, echo = F, include=F, warning=FALSE}
+# Load libraries
+
 # Change to current directory
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
@@ -213,6 +215,7 @@ mu.Glycerol.YAG <- coef(fit.Glycerol.YAG)["mu"]
 
 ```
 
+
 # Figure 2B
 ## Plot of growth especific growth
 
@@ -340,7 +343,7 @@ plot.Pleos
 ggsave(filename = "Figure_2.png", plot = plot.Pleos, width = 12, height = 7, dpi = 300, units = "in", bg = "white")
 
 # print statistics
-writexl::write_xlsx(stat.test, path = "Figure_2_StatisticsTestMu.xlsx")
+#writexl::write_xlsx(stat.test, path = "Figure_2_StatisticsTestMu.xlsx")
 
 
 ```
@@ -351,26 +354,6 @@ writexl::write_xlsx(stat.test, path = "Figure_2_StatisticsTestMu.xlsx")
 ```{r plotGrowthCons, echo = F}
 
 df.pleos <- fread("Data_PleosGrowthCurves_CarbonConsumption_EnzymaticActivity.csv")
-# 
-# #df.pleos
-# 
-# get.DF <- function(data, condition){
-#   df.1 <- data[Condition == condition & Measure == "GrowthKinetics"]
-#   df.2 <- data[Condition == condition & Measure == "CarbonComsuption"]
-#   
-#   df.1 <- df.1 %>% select(!Measure) %>% 
-#     pivot_longer(cols = R1:R3, names_to = "Replicate", values_to = "Observation") %>% 
-#     mutate(MeasureType = "Growth")
-#   
-#   df.2 <- df.2 %>% select(!Measure) %>% 
-#     pivot_longer(cols = R1:R3, names_to = "Replicate", values_to = "Observation")%>% 
-#     mutate(MeasureType = "GlucoseConsumption")
-#   
-#   
-#   df.3 <- bind_rows(df.1, df.2) %>% setDT()
-#   
-#   return(df.3)
-# }
 
 
 ## Plotting the four conditions
@@ -406,17 +389,100 @@ FigureCarbonComsuption <- df.pleos.cc %>% pivot_longer(cols = R1:R3, names_to = 
     legend.position = "none",
     
     ggh4x.axis.ticks.length.minor = rel(1)
-  ); FigureCarbonComsuption
+  )
+
+```
 
 
-# Exporting as png
-ggsave(filename = "Figure_3.png", 
-       plot = FigureCarbonComsuption, 
-       dpi = 300, units = "in", width = 9, height = 7,
-       bg = "white")
+```{r CarbonConsRate}
+df.pleos <- fread("Data_PleosGrowthCurves_CarbonConsumption_EnzymaticActivity.csv")
+
+# Glucose
+df.Gluc <- df.pleos[Condition == "Glucose" & Measure == "GrowthKinetics"]
+df.Gluc <- df.Gluc %>% select(Time, R1, R2, R3) %>% pivot_longer(cols = R1:R3, names_to = "Replicates", values_to = "Biomass" ) %>% group_by(Replicates) %>% reframe(XMax = max(Biomass)) %>% mutate(CarbonSource = "Glucose", AmountCarbon = 10.0, growthRate = mu.Glucose)
+
+# Glucose + YAG
+df.Gluc.YAG <- df.pleos[Condition == "Glucose+YAG" & Measure == "GrowthKinetics"]
+df.Gluc.YAG <- df.Gluc.YAG %>% select(Time, R1, R2, R3) %>% pivot_longer(cols = R1:R3, names_to = "Replicates", values_to = "Biomass" ) %>% group_by(Replicates) %>% reframe(XMax = max(Biomass)) %>% mutate(CarbonSource = "Glucose+YAG", AmountCarbon = 10.0, growthRate = mu.Glucose.YAG)
+
+# Glycerol
+df.Gly <- df.pleos[Condition == "Glycerol" & Measure == "GrowthKinetics"]
+df.Gly <- df.Gly %>% select(Time, R1, R2, R3) %>% pivot_longer(cols = R1:R3, names_to = "Replicates", values_to = "Biomass" ) %>% group_by(Replicates) %>% reframe(XMax = max(Biomass)) %>% mutate(CarbonSource = "Glycerol", AmountCarbon = 10.0, growthRate = mu.Glycerol)
+
+# Glycerol + YAG
+df.Gly.YAG <- df.pleos[Condition == "Glycerol+YAG" & Measure == "GrowthKinetics"]
+df.Gly.YAG <- df.Gly.YAG %>% select(Time, R1, R2, R3) %>% pivot_longer(cols = R1:R3, names_to = "Replicates", values_to = "Biomass" ) %>% group_by(Replicates) %>% reframe(XMax = max(Biomass)) %>% mutate(CarbonSource = "Glycerol+YAG", AmountCarbon = 10.0, growthRate = mu.Glycerol.YAG)
+
+
+# Merge df into a single one
+df.CarbonConsRate <- bind_rows(df.Gluc, df.Gluc.YAG, df.Gly, df.Gly.YAG)
+
+df.CarbonConsRate$CarbonConsumptionRate <- (df.CarbonConsRate$XMax/df.CarbonConsRate$AmountCarbon)*df.CarbonConsRate$growthRate
+
+qSData2plot <- df.CarbonConsRate %>%
+  group_by(CarbonSource) %>% 
+  reframe(qSMean = mean(CarbonConsumptionRate),
+          SE = sd(CarbonConsumptionRate)/sqrt(length(CarbonConsumptionRate)))
+
+statTest.CarbonConsRate <- df.CarbonConsRate %>% 
+  t_test(CarbonConsumptionRate ~ CarbonSource) %>% 
+  add_xy_position(x = "CarbonSource")
+
+
+#qS Plot
+# Plotting 
+CarbonCons.Plot <- ggplot() +
+  geom_bar(data = qSData2plot, aes(x = CarbonSource,
+                                   y = qSMean,
+                                   fill = CarbonSource), 
+           color = "black",
+           stat = "identity", alpha = 0.6)+
+  geom_point(data = df.CarbonConsRate,
+             aes(x = CarbonSource,
+                 y = CarbonConsumptionRate,
+                 shape = CarbonSource,
+                 fill = CarbonSource), 
+             color = "black", size = 3) +
+  geom_errorbar(data = qSData2plot,
+                aes(x = CarbonSource, ymin = qSMean - SE, ymax = qSMean + SE), width = 0.4) +
+  scale_y_continuous(limits = c(0, 0.07),
+                     breaks = seq(0, 0.07, 0.02),
+                     minor_breaks = seq(0, 0.07, 0.01),
+                     expand = c(0, 0),
+                     guide = "axis_minor") +
+  labs(x = "\nCondition", y = "<b>Carbon Consumption Rate (<i>q<sub>S</sub></i>) (gX/gS/h)</b>" )+
+  scale_x_discrete(labels = c("Glucose" = "Glu",
+                              "Glycerol" = "Gly",
+                              "Glucose+YAG" = "Glu + \nAYG",
+                              "Glycerol+YAG" = "Gly + \nAYG"))+
+theme_classic()+
+  scale_fill_manual(values = colorPalette) +
+  scale_color_manual(values = colorPalette) +
+  scale_shape_manual(values = c(21, 22, 23, 24)) +
+  theme(
+    axis.title.x = element_text(face = "bold", color = "black", size = 14),
+    axis.title.y = element_markdown( color = "black", size = 14),
+    axis.text = element_text(size = 13, color = "black"),
+    legend.position = "none",
+    ggh4x.axis.ticks.length.minor = rel(1)
+  ) +
+  stat_pvalue_manual(data = statTest.CarbonConsRate, label = "p.adj.signif")
+
+# Merge plots
+plot.Pleos.CC <- plot_grid(FigureCarbonComsuption, 
+          CarbonCons.Plot, rel_widths = c(1.5, 0.5), align = "h", labels = c("A)", "B)"))
+
+plot.Pleos.CC
+
+# Export plot
+ggsave(filename = "Figure_3.png", plot = plot.Pleos.CC, width = 12, height = 7, dpi = 300, units = "in", bg = "white")
+
+
+
 
 
 ```
+
 
 # Figure 5
 ## Enzymatic Activity
@@ -454,8 +520,7 @@ FigureEnzymaticActivity <- df.EnzAct.Mean %>%
     legend.position = "none"); FigureEnzymaticActivity
 
 # Saving Figure 5
-ggsave(filename = "Figure_5.png", plot = FigureEnzymaticActivity, dpi = 300, units = "in", width = 9, height = 7,
-       bg = "white")
+ggsave(filename = "Figure_5.png", plot = FigureEnzymaticActivity, dpi = 300, units = "in", width = 9, height = 7, bg = "white")
 
 
 ```
