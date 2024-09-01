@@ -6,7 +6,7 @@ Repository with scripts to reproduce the analysis and figures presented in: [Reg
 
 ### Mycelial Growth Rate
 
-The photos are available at: `Figure_1a_1b.pdf` and data to reproduce the figure 1 is available at: `Figure1c.R` 
+The photos are available at: `Figure_1a_1b.pdf`, and data code to reproduce the figure 1 are available at: `Data_MycelialGrowthRate.xlsx"` and `Figure1c.R`, respectively.
 
 ### Growth Curves, Carbon Consumption, and Enzymatic Activity
 
