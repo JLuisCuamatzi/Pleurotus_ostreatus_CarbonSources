@@ -2,7 +2,7 @@
 
 ## Repository created by Jorge Cuamatzi-Flores
 
-Repository with scripts to reproduce the analysis and figures presented in: [insert link to paper here]
+Repository with scripts to reproduce the analysis and figures presented in: [Regulation of dye-decolorizing peroxidase gene expression in Pleurotus ostreatus grown on glycerol as the carbon source](https://peerj.com/articles/17467/)
 
 ### Mycelial Growth Rate
 
